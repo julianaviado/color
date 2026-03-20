@@ -51,8 +51,8 @@ const TEXT_QUESTIONS = [
   {
     id: 'skinCondition',
     label: 'Any skin conditions?',
-    caption: 'These affect which colors and formulas we recommend near your face.',
-    type: 'choice',
+    caption: 'Select all that apply. These affect the formulas and colors we recommend near your face.',
+    type: 'multiselect',
     options: [
       { label: 'None',              value: 'none' },
       { label: 'Rosacea',           value: 'rosacea' },
@@ -143,7 +143,8 @@ export default function QuizScreen({ navigation }) {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [answers, setAnswers]       = useState({});
   const [photos, setPhotos]         = useState({});  // promptId → uri
-  const [selected, setSelected]     = useState(null);
+  const [selected, setSelected]     = useState(null);       // single-select
+  const [multiSelected, setMultiSelected] = useState([]);   // multiselect
 
   const fadeAnim     = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -173,13 +174,35 @@ export default function QuizScreen({ navigation }) {
     setTimeout(async () => {
       await saveQuizAnswersLocally(updatedAnswers);
       setAnswers(updatedAnswers);
-
-      if (textIndex < TEXT_QUESTIONS.length - 1) {
-        animateTo(() => { setTextIndex(i => i + 1); setSelected(null); });
-      } else {
-        animateTo(() => { setPhase('photos'); setPhotoIndex(0); setSelected(null); });
-      }
+      advanceText(() => { setSelected(null); });
     }, 280);
+  }
+
+  function handleMultiToggle(value) {
+    setMultiSelected(prev => {
+      if (value === 'none') return ['none'];
+      const withoutNone = prev.filter(v => v !== 'none');
+      return withoutNone.includes(value)
+        ? withoutNone.filter(v => v !== value)
+        : [...withoutNone, value];
+    });
+  }
+
+  async function handleMultiNext() {
+    const question = TEXT_QUESTIONS[textIndex];
+    const val = multiSelected.length === 0 ? ['none'] : multiSelected;
+    const updatedAnswers = { ...answers, [question.id]: val };
+    await saveQuizAnswersLocally(updatedAnswers);
+    setAnswers(updatedAnswers);
+    advanceText(() => { setMultiSelected([]); });
+  }
+
+  function advanceText(onReset) {
+    if (textIndex < TEXT_QUESTIONS.length - 1) {
+      animateTo(() => { setTextIndex(i => i + 1); onReset(); });
+    } else {
+      animateTo(() => { setPhase('photos'); setPhotoIndex(0); onReset(); });
+    }
   }
 
   async function handlePickPhoto(promptId) {
@@ -256,7 +279,10 @@ export default function QuizScreen({ navigation }) {
             stepIndex={textIndex}
             total={TEXT_QUESTIONS.length}
             selected={selected}
+            multiSelected={multiSelected}
             onSelect={handleTextSelect}
+            onMultiToggle={handleMultiToggle}
+            onMultiNext={handleMultiNext}
           />
         ) : (
           <PhotoPrompt
@@ -279,7 +305,9 @@ export default function QuizScreen({ navigation }) {
 // Text question component
 // ─────────────────────────────────────────────
 
-function TextQuestion({ question, stepIndex, total, selected, onSelect }) {
+function TextQuestion({ question, stepIndex, total, selected, multiSelected, onSelect, onMultiToggle, onMultiNext }) {
+  const isMulti = question.type === 'multiselect';
+
   return (
     <ScrollView contentContainerStyle={styles.questionWrap} showsVerticalScrollIndicator={false}>
       <View style={styles.stepLabel}>
@@ -293,28 +321,39 @@ function TextQuestion({ question, stepIndex, total, selected, onSelect }) {
       )}
 
       <View style={styles.optionsWrap}>
-        {question.options.map(opt => (
-          <TouchableOpacity
-            key={opt.value}
-            style={[
-              styles.optionBtn,
-              selected === opt.value && styles.optionBtnSelected,
-            ]}
-            onPress={() => onSelect(opt.value)}
-            activeOpacity={0.8}
-          >
-            {opt.swatch && (
-              <View style={[styles.optionSwatch, { backgroundColor: opt.swatch }]} />
-            )}
-            <Text style={[
-              styles.optionLabel,
-              selected === opt.value && styles.optionLabelSelected,
-            ]}>
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {question.options.map(opt => {
+          const isSelected = isMulti
+            ? multiSelected.includes(opt.value)
+            : selected === opt.value;
+
+          return (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.optionBtn, isSelected && styles.optionBtnSelected]}
+              onPress={() => isMulti ? onMultiToggle(opt.value) : onSelect(opt.value)}
+              activeOpacity={0.8}
+            >
+              {opt.swatch && (
+                <View style={[styles.optionSwatch, { backgroundColor: opt.swatch }]} />
+              )}
+              {isMulti && (
+                <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                  {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+              )}
+              <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
+
+      {isMulti && (
+        <TouchableOpacity style={styles.multiNextBtn} onPress={onMultiNext} activeOpacity={0.85}>
+          <Text style={styles.multiNextBtnText}>Next →</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -482,6 +521,37 @@ const styles = StyleSheet.create({
   },
   optionLabelSelected: {
     color: COLORS.accentDark,
+    fontWeight: TYPOGRAPHY.weights.medium,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+  },
+  checkboxSelected: {
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
+  },
+  checkmark: {
+    color: '#FAF8F5',
+    fontSize: 11,
+    fontWeight: TYPOGRAPHY.weights.bold,
+  },
+  multiNextBtn: {
+    marginTop: SPACING.lg,
+    paddingVertical: SPACING.md + 2,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.textPrimary,
+    alignItems: 'center',
+  },
+  multiNextBtnText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.sizes.base,
     fontWeight: TYPOGRAPHY.weights.medium,
   },
 
