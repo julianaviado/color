@@ -253,7 +253,7 @@ export default function ColorMatchScreen({ navigation, route }) {
 
       {/* Camera / Photo view */}
       {mode === 'live' ? (
-        <CameraView ref={cameraRef} style={styles.camera} facing="back">
+        <CameraView ref={cameraRef} style={styles.camera} facing="back" flash="off">
           {/* Top bar */}
           <SafeAreaView>
             <View style={styles.topBar}>

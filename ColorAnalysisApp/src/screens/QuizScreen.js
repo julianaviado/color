@@ -129,11 +129,11 @@ const PHOTO_PROMPTS = [
   },
   {
     id: 'photo_fave',
-    color: 'Your Most Flattering Color Ever',
+    color: 'The Top People Always Compliment',
     colorHex: '#C4846E',
-    instruction: 'Finally — your most flattering outfit ever',
-    why: 'The color that consistently gets you the most compliments tells us exactly what your skin responds to best.',
-    tip: 'Whatever color you always reach for, or what people say makes you look amazing. No wrong answer.',
+    instruction: 'A photo in the top people always say looks great on you',
+    why: 'Compliments are data. When people notice a color on you unprompted, it means your skin is responding well to it — that\'s exactly what we\'re looking for.',
+    tip: 'Think of a specific top or outfit where someone said "you look so good in that" or "that color is perfect on you." That\'s the one.',
   },
 ];
 
