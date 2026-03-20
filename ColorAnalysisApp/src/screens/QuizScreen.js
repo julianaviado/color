@@ -83,18 +83,6 @@ const TEXT_QUESTIONS = [
       { label: 'Both are fine', value: 'both' },
     ],
   },
-  {
-    id: 'contrast',
-    label: 'How much contrast is there across your bare face?',
-    caption: 'Difference between your skin tone and your darkest features — brows, lashes, beard. No makeup.',
-    type: 'choice',
-    options: [
-      { label: 'Very high — very striking',    value: 'very_high' },
-      { label: 'High',                         value: 'high' },
-      { label: 'Medium',                       value: 'medium' },
-      { label: 'Low — everything blends soft', value: 'low' },
-    ],
-  },
 ];
 
 // Guided photo prompts — colors chosen to test the exact dimensions from color_analysis_system.md

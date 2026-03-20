@@ -58,8 +58,9 @@ export function analyzeColorSeason(answers) {
   const saturation = 5.0;
 
   // ── Contrast ──
-  const contrastMap = { very_high: 9.5, high: 7.5, medium: 5.0, low: 2.5 };
-  const contrast = contrastMap[answers.contrast] ?? 5.0;
+  // Not self-assessed — Claude determines this from photos.
+  // Default to neutral; overridden by Claude analysis on results screen.
+  const contrast = 5.0;
 
   // ── Seasonal variation (informational — shown on results, doesn't change season) ──
   const seasonalVariation = answers.seasonalChange ?? 'none';
