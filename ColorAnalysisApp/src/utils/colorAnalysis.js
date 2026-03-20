@@ -71,11 +71,6 @@ export function analyzeColorSeason(answers) {
   else if (answers.jewelry === 'silver') tempScores.push(8.5);
   else tempScores.push(5.0);
 
-  // Vein color
-  if (answers.veinColor === 'blue_purple') tempScores.push(8.5);
-  else if (answers.veinColor === 'green')  tempScores.push(2.5);
-  else tempScores.push(5.0);
-
   const temperature = average(tempScores);
 
   // ── Depth (0 = very light, 10 = very deep) ──

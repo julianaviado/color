@@ -89,17 +89,6 @@ const TEXT_QUESTIONS = [
     ],
   },
   {
-    id: 'veinColor',
-    label: 'Look at the veins on your inner wrist',
-    caption: 'In natural light, what color are they?',
-    type: 'choice',
-    options: [
-      { label: 'Blue or purple',  value: 'blue_purple' },
-      { label: 'Green',           value: 'green' },
-      { label: 'Blue-green / both', value: 'both' },
-    ],
-  },
-  {
     id: 'jewelry',
     label: 'Which metal looks best on you?',
     caption: 'Against bare skin — not with an outfit.',
