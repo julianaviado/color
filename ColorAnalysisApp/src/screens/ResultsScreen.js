@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, StatusBar, Animated, Share, ActivityIndicator,
+  SafeAreaView, StatusBar, Animated, Share, ActivityIndicator, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { signOut } from 'firebase/auth';
-import { auth } from '../utils/firebase';
+import { auth, firebaseEnabled } from '../utils/firebase';
 import { saveResultLocally } from '../utils/storage';
 import { generateSeasonNarrative } from '../utils/claudeApi';
 import { SEASON_PROFILES, SEASON_GRADIENTS } from '../data/seasons';
@@ -13,6 +15,7 @@ import { SEASON_ACCENT_COLORS, COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } fr
 import TraitBar from '../components/TraitBar';
 import SeasonBadge from '../components/SeasonBadge';
 import ColorSwatch from '../components/ColorSwatch';
+import ProfileCard from '../components/ProfileCard';
 
 export default function ResultsScreen({ navigation, route }) {
   const { result } = route.params;
@@ -21,10 +24,12 @@ export default function ResultsScreen({ navigation, route }) {
   const accentColor = SEASON_ACCENT_COLORS[subSeason] ?? COLORS.accent;
   const gradientColors = SEASON_GRADIENTS[primarySeason];
 
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(40)).current;
-  const [narrative, setNarrative] = useState(null);
+  const fadeAnim    = useRef(new Animated.Value(0)).current;
+  const slideAnim   = useRef(new Animated.Value(40)).current;
+  const cardRef     = useRef(null);
+  const [narrative, setNarrative]             = useState(null);
   const [narrativeLoading, setNarrativeLoading] = useState(true);
+  const [sharingCard, setSharingCard]           = useState(false);
 
   useEffect(() => {
     saveResultLocally(result);
@@ -43,11 +48,32 @@ export default function ResultsScreen({ navigation, route }) {
       .catch(() => setNarrativeLoading(false));
   }, []);
 
-  async function handleShare() {
+  async function handleShareCard() {
+    if (!cardRef.current) return;
+    setSharingCard(true);
+    try {
+      const uri = await cardRef.current.capture();
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share your colour season',
+        });
+      } else {
+        Alert.alert('Sharing not available on this device.');
+      }
+    } catch {
+      Alert.alert('Could not capture card. Try again.');
+    } finally {
+      setSharingCard(false);
+    }
+  }
+
+  async function handleShareText() {
     try {
       await Share.share({
-        title: 'My Colour Season — hue garden',
-        message: `I just discovered I'm a ${subSeason} in the 12-season colour system! 🌿\n\nKey traits:\n• Temperature: ${traits.temperature.label}\n• Depth: ${traits.depth.label}\n• Saturation: ${traits.saturation.label}\n• Contrast: ${traits.contrast.label}\n\nDiscover yours with hue garden.`,
+        title: 'My Colour Season — Hue Garden',
+        message: `I just discovered I'm a ${subSeason} in the 12-season colour system! 🌿\n\nKey traits:\n• Temperature: ${traits.temperature.label}\n• Depth: ${traits.depth.label}\n• Saturation: ${traits.saturation.label}\n• Contrast: ${traits.contrast.label}\n\nDiscover yours with Hue Garden.`,
       });
     } catch {}
   }
@@ -57,7 +83,11 @@ export default function ResultsScreen({ navigation, route }) {
   }
 
   function handleSignOut() {
-    signOut(auth).then(() => navigation.replace('Splash'));
+    if (firebaseEnabled && auth) {
+      signOut(auth).then(() => navigation.replace('Splash'));
+    } else {
+      navigation.replace('Splash');
+    }
   }
 
   return (
@@ -122,38 +152,55 @@ export default function ResultsScreen({ navigation, route }) {
             </View>
           </View>
 
+          {/* Seasonal variation callout */}
+          {result.seasonalVariation && result.seasonalVariation !== 'none' && (
+            <View style={[styles.section, styles.variationCard]}>
+              <Text style={styles.variationTitle}>
+                {result.seasonalVariation === 'darker_in_summer' ? '☀️  Seasonal depth shift' : '🌿  Subtle seasonal shift'}
+              </Text>
+              <Text style={styles.variationText}>
+                {result.seasonalVariation === 'darker_in_summer'
+                  ? `You tan noticeably in summer, which means your best colours deepen slightly — lean into richer, warmer versions of your ${subSeason} palette in summer months. In winter, lighter versions of the same palette will feel more natural.`
+                  : `You have a slight seasonal shift. Your core ${subSeason} season stays the same — but give yourself permission to use slightly warmer, deeper tones in summer and softer tones in winter.`}
+              </Text>
+            </View>
+          )}
+
+          {/* Shareable profile card */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Your profile card</Text>
+            <ViewShot ref={cardRef} options={{ format: 'png', quality: 1 }}>
+              <ProfileCard result={result} />
+            </ViewShot>
+            <View style={styles.shareCardRow}>
+              <TouchableOpacity
+                style={[styles.shareCardBtn, { backgroundColor: accentColor }]}
+                onPress={handleShareCard}
+                activeOpacity={0.85}
+                disabled={sharingCard}
+              >
+                {sharingCard
+                  ? <ActivityIndicator color="#FAF8F5" size="small" />
+                  : <Text style={styles.shareCardBtnText}>↗  Share card</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shareTextBtn}
+                onPress={handleShareText}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.shareTextBtnText}>Share as text</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Action buttons */}
           <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnPrimary, { backgroundColor: accentColor }]}
-              onPress={() => navigation.navigate('ColorMatch', { result })}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.actionBtnTextLight}>◎  Shop with camera</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnSecondary]}
-              onPress={() => navigation.navigate('Palette', { result })}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.actionBtnText}>View full palette</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnSecondary]}
               onPress={() => navigation.navigate('Gifts', { result })}
               activeOpacity={0.85}
             >
               <Text style={styles.actionBtnText}>🎁  Gift guide</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnSecondary]}
-              onPress={handleShare}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.actionBtnText}>↗  Share my season</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -316,5 +363,53 @@ const styles = StyleSheet.create({
   signOutText: {
     fontSize: TYPOGRAPHY.sizes.sm,
     color: COLORS.textTertiary,
+  },
+
+  variationCard: {
+    backgroundColor: '#FFF8F0',
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.accent,
+  },
+  variationTitle: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    fontWeight: TYPOGRAPHY.weights.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+  },
+  variationText: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+
+  shareCardRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  shareCardBtn: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.full,
+    alignItems: 'center',
+  },
+  shareCardBtnText: {
+    color: '#FAF8F5',
+    fontSize: TYPOGRAPHY.sizes.base,
+    fontWeight: TYPOGRAPHY.weights.medium,
+  },
+  shareTextBtn: {
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  shareTextBtnText: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    color: COLORS.textSecondary,
   },
 });

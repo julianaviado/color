@@ -9,7 +9,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
 } from 'firebase/auth';
-import { auth } from '../utils/firebase';
+import { auth, firebaseEnabled } from '../utils/firebase';
 import { syncResultToFirebase } from '../utils/storage';
 import { COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme';
 
@@ -24,6 +24,13 @@ export default function AuthScreen({ navigation, route }) {
 
   async function handleSubmit() {
     setError('');
+
+    // Firebase not configured — skip auth, go straight to results
+    if (!firebaseEnabled) {
+      navigation.replace('Main', { result });
+      return;
+    }
+
     if (!email || !password) { setError('Please fill in all fields.'); return; }
     if (mode === 'signup' && password.length < 6) {
       setError('Password must be at least 6 characters.');
@@ -42,7 +49,7 @@ export default function AuthScreen({ navigation, route }) {
         const cred = await signInWithEmailAndPassword(auth, email, password);
         await syncResultToFirebase(cred.user.uid, answers, result);
       }
-      navigation.replace('Results', { result, answers });
+      navigation.replace('Main', { result });
     } catch (err) {
       setError(friendlyError(err.code));
     } finally {

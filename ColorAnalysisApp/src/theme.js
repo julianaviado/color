@@ -42,19 +42,24 @@ export const COLORS = {
 };
 
 export const TYPOGRAPHY = {
-  // Heading — use PP Editorial New (serif) when loaded
-  // Falls back to Georgia which has same editorial feel
+  // Albert Sans — clean, editorial, geometric sans
   heading: {
-    fontFamily: 'PPEditorialNew-Regular',
-    fallback: 'Georgia',
+    fontFamily: 'AlbertSans_300Light',
   },
   headingItalic: {
-    fontFamily: 'PPEditorialNew-Italic',
-    fallback: 'Georgia',
+    fontFamily: 'AlbertSans_300Light_Italic',
   },
-  // Body — clean sans-serif
   body: {
-    fontFamily: 'System',
+    fontFamily: 'AlbertSans_400Regular',
+  },
+  fonts: {
+    light:       'AlbertSans_300Light',
+    lightItalic: 'AlbertSans_300Light_Italic',
+    regular:     'AlbertSans_400Regular',
+    italic:      'AlbertSans_400Regular_Italic',
+    medium:      'AlbertSans_500Medium',
+    semibold:    'AlbertSans_600SemiBold',
+    bold:        'AlbertSans_700Bold',
   },
 
   sizes: {

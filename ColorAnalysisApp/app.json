@@ -20,7 +20,11 @@
     },
     "android": {
       "package": "com.huegarden.app",
-      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "plugins": [
       [
@@ -40,7 +44,8 @@
         {
           "photosPermission": "Allow hue garden to access your photo library for colour matching."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }

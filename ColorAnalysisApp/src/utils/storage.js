@@ -1,17 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { firebaseEnabled, db } from './firebase';
+
+// Firestore imports — only used when Firebase is configured
+let firestoreDoc, firestoreSetDoc, firestoreGetDoc, firestoreUpdateDoc, serverTimestamp;
+if (firebaseEnabled) {
+  const fs = require('firebase/firestore');
+  firestoreDoc        = fs.doc;
+  firestoreSetDoc     = fs.setDoc;
+  firestoreGetDoc     = fs.getDoc;
+  firestoreUpdateDoc  = fs.updateDoc;
+  serverTimestamp     = fs.serverTimestamp;
+}
 
 const KEYS = {
-  QUIZ_ANSWERS: 'hg_quiz_answers',
+  QUIZ_ANSWERS:    'hg_quiz_answers',
   ANALYSIS_RESULT: 'hg_analysis_result',
-  QUIZ_HISTORY: 'hg_quiz_history',
-  SAVED_COLORS: 'hg_saved_colors',
+  QUIZ_HISTORY:    'hg_quiz_history',
+  SAVED_COLORS:    'hg_saved_colors',
+  FRIENDS:         'hg_friends',
 };
 
 // ─────────────────────────────────────────────
-// Quiz answers — saved locally as user goes through quiz
-// so progress is never lost
+// Quiz answers
 // ─────────────────────────────────────────────
 
 export async function saveQuizAnswersLocally(answers) {
@@ -24,11 +34,16 @@ export async function loadQuizAnswersLocally() {
 }
 
 // ─────────────────────────────────────────────
-// Analysis result — local cache + Firebase sync
+// Analysis result — local cache + optional Firebase sync
 // ─────────────────────────────────────────────
 
 export async function saveResultLocally(result) {
   await AsyncStorage.setItem(KEYS.ANALYSIS_RESULT, JSON.stringify(result));
+
+  // Append to local quiz history
+  const history = await loadQuizHistoryLocally();
+  history.unshift({ result, takenAt: new Date().toISOString() });
+  await AsyncStorage.setItem(KEYS.QUIZ_HISTORY, JSON.stringify(history.slice(0, 10)));
 }
 
 export async function loadResultLocally() {
@@ -37,13 +52,13 @@ export async function loadResultLocally() {
 }
 
 export async function syncResultToFirebase(uid, answers, result) {
+  if (!firebaseEnabled || !uid) return;
   try {
-    const userRef = doc(db, 'users', uid);
-    const existing = await getDoc(userRef);
+    const userRef = firestoreDoc(db, 'users', uid);
+    const existing = await firestoreGetDoc(userRef);
 
     if (!existing.exists()) {
-      // First-time save
-      await setDoc(userRef, {
+      await firestoreSetDoc(userRef, {
         quizAnswers: answers,
         analysisResult: result,
         quizHistory: [{ answers, result, takenAt: new Date().toISOString() }],
@@ -52,26 +67,25 @@ export async function syncResultToFirebase(uid, answers, result) {
         subscription: 'free',
       });
     } else {
-      // Update existing — append to history
       const data = existing.data();
       const history = data.quizHistory ?? [];
       history.push({ answers, result, takenAt: new Date().toISOString() });
-
-      await updateDoc(userRef, {
+      await firestoreUpdateDoc(userRef, {
         quizAnswers: answers,
         analysisResult: result,
-        quizHistory: history.slice(-10), // keep last 10 attempts
+        quizHistory: history.slice(-10),
         updatedAt: serverTimestamp(),
       });
     }
   } catch (err) {
-    console.warn('Firebase sync failed (offline?), result saved locally:', err.message);
+    console.warn('Firebase sync failed (offline?):', err.message);
   }
 }
 
 export async function loadResultFromFirebase(uid) {
+  if (!firebaseEnabled || !uid) return null;
   try {
-    const snap = await getDoc(doc(db, 'users', uid));
+    const snap = await firestoreGetDoc(firestoreDoc(db, 'users', uid));
     return snap.exists() ? snap.data() : null;
   } catch {
     return null;
@@ -88,22 +102,18 @@ export async function getSavedColors() {
 }
 
 export async function saveColor(uid, colorEntry) {
-  // colorEntry: { hex, name, rating, verdict, savedAt }
   const existing = await getSavedColors();
-  const updated = [colorEntry, ...existing].slice(0, 200); // cap at 200
+  const updated = [colorEntry, ...existing].slice(0, 200);
   await AsyncStorage.setItem(KEYS.SAVED_COLORS, JSON.stringify(updated));
 
-  // Sync to Firebase if online
-  if (uid) {
+  if (firebaseEnabled && uid) {
     try {
-      await setDoc(
-        doc(db, 'savedColors', `${uid}_${colorEntry.savedAt}`),
+      await firestoreSetDoc(
+        firestoreDoc(db, 'savedColors', `${uid}_${colorEntry.savedAt}`),
         { ...colorEntry, uid },
         { merge: true }
       );
-    } catch {
-      // silently fail — already saved locally
-    }
+    } catch {}
   }
 }
 
@@ -120,4 +130,29 @@ export async function removeColor(savedAt) {
 export async function loadQuizHistoryLocally() {
   const raw = await AsyncStorage.getItem(KEYS.QUIZ_HISTORY);
   return raw ? JSON.parse(raw) : [];
+}
+
+// ─────────────────────────────────────────────
+// Friends — stored locally
+// friend: { id, name, subSeason, primarySeason, traits, addedAt }
+// ─────────────────────────────────────────────
+
+export async function getFriends() {
+  const raw = await AsyncStorage.getItem(KEYS.FRIENDS);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function saveFriend(friend) {
+  const existing = await getFriends();
+  // Overwrite if same id
+  const others = existing.filter(f => f.id !== friend.id);
+  const updated = [friend, ...others];
+  await AsyncStorage.setItem(KEYS.FRIENDS, JSON.stringify(updated));
+  return friend;
+}
+
+export async function removeFriend(id) {
+  const existing = await getFriends();
+  const updated = existing.filter(f => f.id !== id);
+  await AsyncStorage.setItem(KEYS.FRIENDS, JSON.stringify(updated));
 }

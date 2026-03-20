@@ -4,6 +4,7 @@ import {
   SafeAreaView, StatusBar, Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { firebaseEnabled } from '../utils/firebase';
 import { SEASON_GRADIENTS, COLORS, TYPOGRAPHY, SPACING, RADIUS, SHADOWS } from '../theme';
 
 const { height } = Dimensions.get('window');
@@ -69,6 +70,16 @@ export default function ResultsGateScreen({ navigation, route }) {
           <TouchableOpacity onPress={handleLogin} style={styles.secondaryBtn} activeOpacity={0.7}>
             <Text style={styles.secondaryBtnText}>I already have an account</Text>
           </TouchableOpacity>
+
+          {!firebaseEnabled && (
+            <TouchableOpacity
+              onPress={() => navigation.replace('Main', { result })}
+              style={styles.secondaryBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.secondaryBtnText}>Continue without account</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </SafeAreaView>
     </LinearGradient>

@@ -1,34 +1,44 @@
 import { SEASON_PROFILES } from '../data/seasons';
 
 // ─────────────────────────────────────────────
-// Scoring Tables
+// Skin undertone mapping (primary axis — skin only)
 // ─────────────────────────────────────────────
 
-const HAIR_TEMP = {
-  platinum: 5.5, golden_blonde: 2.0, strawberry_blonde: 2.5,
-  auburn: 3.0, medium_brown: 5.0, dark_brown: 5.5, ash: 7.5, black: 6.0,
-};
-
-const HAIR_DEPTH = {
-  platinum: 1.0, golden_blonde: 2.0, strawberry_blonde: 2.5,
-  auburn: 4.0, medium_brown: 5.0, dark_brown: 7.5, ash: 3.5, black: 9.0,
-};
-
-const EYE_TEMP = {
-  dark_brown: 3.0, hazel: 3.5, amber: 2.0,
-  blue_green: 6.0, light_blue: 8.0, grey: 9.0,
-};
-
 const SKIN_UNDERTONE_TEMP = {
-  peachy: 2.0, golden_olive: 2.5, pink_rosy: 7.5, neutral_beige: 5.0, blue_pink: 9.0,
+  golden_yellow:  2.0,   // warm
+  peachy:         2.5,   // warm-neutral
+  neutral_beige:  5.0,   // neutral
+  pink_rosy:      7.5,   // cool
+  blue_pink:      9.0,   // cool
+  olive_green:    3.5,   // warm-olive
+  gray_ashy:      8.0,   // cool-olive
 };
 
 const SKIN_DEPTH_MAP = {
-  very_fair: 1.0, fair: 2.5, light_medium: 4.0, medium_tan: 6.0, deep: 8.0, very_deep: 10.0,
+  fair:       1.5,
+  light:      3.0,
+  medium:     5.0,
+  tan:        6.5,
+  deep:       8.5,
+  very_deep: 10.0,
 };
 
-const CONTRAST_MAP = {
-  very_high: 9.5, high: 7.0, medium: 5.0, low: 2.5,
+// Skin conditions that affect saturation tolerance
+// Rosacea/eczema/sensitivity → lower saturation tolerance (more muted)
+const CONDITION_SAT_MODIFIER = {
+  none:             0,
+  hyperpigmentation: 0,
+  eczema:          -1.5,
+  rosacea:         -2.0,
+  sensitivity:     -1.0,
+};
+
+// Texture / appearance modifiers
+const TEXTURE_TEMP_MODIFIER = {
+  even:             0,
+  olive_toned:     -1.5,  // pushes warmer
+  redness_prone:    1.0,  // hints cool
+  very_uneven:      0,
 };
 
 // ─────────────────────────────────────────────
@@ -38,47 +48,67 @@ const CONTRAST_MAP = {
 export function analyzeColorSeason(answers) {
   // ── Temperature (0 = very warm, 10 = very cool) ──
   const tempScores = [];
-  if (answers.veinColor === 'blue_purple') tempScores.push(9.0);
-  else if (answers.veinColor === 'green') tempScores.push(2.0);
-  else tempScores.push(5.0);
 
-  if (HAIR_TEMP[answers.hairColor] !== undefined) tempScores.push(HAIR_TEMP[answers.hairColor]);
-  if (EYE_TEMP[answers.eyeColor] !== undefined) tempScores.push(EYE_TEMP[answers.eyeColor]);
-  if (SKIN_UNDERTONE_TEMP[answers.skinUndertone] !== undefined) tempScores.push(SKIN_UNDERTONE_TEMP[answers.skinUndertone]);
+  // Skin undertone is the primary signal
+  if (SKIN_UNDERTONE_TEMP[answers.skinUndertone] !== undefined) {
+    // Weight undertone heavily — it's the most reliable axis
+    tempScores.push(SKIN_UNDERTONE_TEMP[answers.skinUndertone]);
+    tempScores.push(SKIN_UNDERTONE_TEMP[answers.skinUndertone]);
+  }
 
+  // Texture modifier
+  if (answers.skinTexture && TEXTURE_TEMP_MODIFIER[answers.skinTexture] !== undefined) {
+    tempScores.push(5.0 + TEXTURE_TEMP_MODIFIER[answers.skinTexture]);
+  }
+
+  // White/cream test — classic temperature diagnostic
   if (answers.bestWhite === 'pure_white') tempScores.push(8.0);
-  else if (answers.bestWhite === 'cream') tempScores.push(2.0);
+  else if (answers.bestWhite === 'cream')  tempScores.push(2.0);
   else tempScores.push(5.0);
 
-  if (answers.jewelry === 'gold') tempScores.push(2.0);
+  // Jewelry
+  if (answers.jewelry === 'gold')   tempScores.push(2.0);
   else if (answers.jewelry === 'silver') tempScores.push(8.5);
+  else tempScores.push(5.0);
+
+  // Vein color
+  if (answers.veinColor === 'blue_purple') tempScores.push(8.5);
+  else if (answers.veinColor === 'green')  tempScores.push(2.5);
   else tempScores.push(5.0);
 
   const temperature = average(tempScores);
 
   // ── Depth (0 = very light, 10 = very deep) ──
   const depthScores = [];
-  if (HAIR_DEPTH[answers.hairColor] !== undefined) depthScores.push(HAIR_DEPTH[answers.hairColor]);
-  if (SKIN_DEPTH_MAP[answers.skinDepth] !== undefined) depthScores.push(SKIN_DEPTH_MAP[answers.skinDepth]);
-
+  if (SKIN_DEPTH_MAP[answers.skinDepth] !== undefined) {
+    depthScores.push(SKIN_DEPTH_MAP[answers.skinDepth]);
+    depthScores.push(SKIN_DEPTH_MAP[answers.skinDepth]); // double-weight skin depth
+  }
   const depth = depthScores.length > 0 ? average(depthScores) : 5.0;
 
   // ── Saturation (0 = muted, 10 = vivid) ──
   const satScores = [];
-  if (answers.featureClarity === 'very_clear') satScores.push(9.5);
-  else if (answers.featureClarity === 'fairly_clear') satScores.push(7.0);
+  if (answers.featureClarity === 'very_clear')    satScores.push(9.5);
+  else if (answers.featureClarity === 'fairly_clear')  satScores.push(7.0);
   else if (answers.featureClarity === 'somewhat_soft') satScores.push(3.5);
-  else if (answers.featureClarity === 'very_soft') satScores.push(1.5);
+  else if (answers.featureClarity === 'very_soft')     satScores.push(1.5);
 
-  const saturation = satScores.length > 0 ? average(satScores) : 5.0;
+  // Skin conditions lower saturation tolerance
+  const conditionMod = CONDITION_SAT_MODIFIER[answers.skinCondition] ?? 0;
+  let saturation = satScores.length > 0 ? average(satScores) + conditionMod : 5.0 + conditionMod;
+  saturation = Math.max(0, Math.min(10, saturation));
 
   // ── Contrast ──
-  const contrastVal = CONTRAST_MAP[answers.contrast] ?? 5.0;
-  // Cross-check against depth spread
-  const hairDepthVal = HAIR_DEPTH[answers.hairColor] ?? 5;
-  const skinDepthVal = SKIN_DEPTH_MAP[answers.skinDepth] ?? 5;
-  const calculatedContrast = Math.abs(hairDepthVal - skinDepthVal) * 1.3;
-  const contrast = average([contrastVal, Math.min(10, calculatedContrast)]);
+  const contrastScores = [];
+  if (answers.contrast === 'very_high') contrastScores.push(9.5);
+  else if (answers.contrast === 'high')   contrastScores.push(7.5);
+  else if (answers.contrast === 'medium') contrastScores.push(5.0);
+  else if (answers.contrast === 'low')    contrastScores.push(2.5);
+  const contrast = contrastScores.length > 0 ? average(contrastScores) : 5.0;
+
+  // ── Seasonal skin variation ──
+  // Some people are deeper in summer, lighter in winter
+  const seasonalVariation = answers.seasonalChange ?? 'none';
 
   // ── Match to one of the 12 seasons ──
   const { subSeason } = findClosestSeason(temperature, depth, saturation);
@@ -89,24 +119,13 @@ export function analyzeColorSeason(answers) {
     primarySeason,
     subSeason,
     secondaryBorrowing: seasonData.secondaryBorrowing,
-    borrowingNote: seasonData.borrowingNote,
+    borrowingNote:      seasonData.borrowingNote,
+    seasonalVariation,
     traits: {
-      temperature: {
-        value: temperature,
-        label: getTemperatureLabel(temperature),
-      },
-      depth: {
-        value: depth,
-        label: getDepthLabel(depth),
-      },
-      saturation: {
-        value: saturation,
-        label: getSaturationLabel(saturation),
-      },
-      contrast: {
-        value: contrast,
-        label: getContrastLabel(contrast),
-      },
+      temperature: { value: temperature,  label: getTemperatureLabel(temperature) },
+      depth:       { value: depth,        label: getDepthLabel(depth) },
+      saturation:  { value: saturation,   label: getSaturationLabel(saturation) },
+      contrast:    { value: contrast,     label: getContrastLabel(contrast) },
     },
   };
 }
@@ -118,7 +137,6 @@ export function analyzeColorSeason(answers) {
 function findClosestSeason(temperature, depth, saturation) {
   const candidates = Object.entries(SEASON_PROFILES).map(([name, profile]) => {
     const { dominantTraits: t } = profile;
-    // Temperature is weighted higher as it is the primary axis
     const dist = Math.sqrt(
       2.2 * Math.pow(temperature - t.temperature, 2) +
       1.4 * Math.pow(depth - t.depth, 2) +
@@ -132,8 +150,7 @@ function findClosestSeason(temperature, depth, saturation) {
 }
 
 // ─────────────────────────────────────────────
-// Color distance for camera matching
-// Uses weighted Euclidean distance (perceptual)
+// Color distance for camera matching (perceptual)
 // ─────────────────────────────────────────────
 
 export function colorDistance(rgb1, rgb2) {
@@ -162,12 +179,12 @@ export function rgbToHex(r, g, b) {
 }
 
 export function getMatchRating(distance) {
-  if (distance < 28) return { label: 'Perfect Match', emoji: '✨', color: '#2ECC71' };
-  if (distance < 55) return { label: 'Great Match',   emoji: '💚', color: '#27AE60' };
-  if (distance < 85) return { label: 'Good Match',    emoji: '👍', color: '#F39C12' };
-  if (distance < 115) return { label: 'Near Match',   emoji: '🤔', color: '#E67E22' };
+  if (distance < 28)  return { label: 'Perfect Match',        emoji: '✨', color: '#2ECC71' };
+  if (distance < 55)  return { label: 'Great Match',          emoji: '💚', color: '#27AE60' };
+  if (distance < 85)  return { label: 'Good Match',           emoji: '👍', color: '#F39C12' };
+  if (distance < 115) return { label: 'Near Match',           emoji: '🤔', color: '#E67E22' };
   if (distance < 150) return { label: 'Proceed with Caution', emoji: '⚠️', color: '#E74C3C' };
-  return { label: 'Avoid',                             emoji: '❌', color: '#C0392B' };
+  return               { label: 'Avoid',                      emoji: '❌', color: '#C0392B' };
 }
 
 export function findClosestPaletteColors(sampledRgb, palette, top = 3) {
@@ -198,10 +215,10 @@ function getTemperatureLabel(v) {
 }
 
 function getDepthLabel(v) {
-  if (v <= 2) return 'Very Light';
-  if (v <= 4) return 'Light';
-  if (v <= 6) return 'Medium';
-  if (v <= 8) return 'Deep';
+  if (v <= 2)  return 'Fair';
+  if (v <= 4)  return 'Light';
+  if (v <= 6)  return 'Medium';
+  if (v <= 8)  return 'Deep';
   return 'Very Deep';
 }
 
