@@ -23,23 +23,6 @@ const SKIN_DEPTH_MAP = {
   very_deep: 10.0,
 };
 
-// Skin conditions that affect saturation tolerance
-// Rosacea/eczema/sensitivity → lower saturation tolerance (more muted)
-const CONDITION_SAT_MODIFIER = {
-  none:             0,
-  hyperpigmentation: 0,
-  eczema:          -1.5,
-  rosacea:         -2.0,
-  sensitivity:     -1.0,
-};
-
-// Texture / appearance modifiers
-const TEXTURE_TEMP_MODIFIER = {
-  even:             0,
-  olive_toned:     -1.5,  // pushes warmer
-  redness_prone:    1.0,  // hints cool
-  very_uneven:      0,
-};
 
 // ─────────────────────────────────────────────
 // Main Analysis Function
@@ -54,11 +37,6 @@ export function analyzeColorSeason(answers) {
     // Weight undertone heavily — it's the most reliable axis
     tempScores.push(SKIN_UNDERTONE_TEMP[answers.skinUndertone]);
     tempScores.push(SKIN_UNDERTONE_TEMP[answers.skinUndertone]);
-  }
-
-  // Texture modifier
-  if (answers.skinTexture && TEXTURE_TEMP_MODIFIER[answers.skinTexture] !== undefined) {
-    tempScores.push(5.0 + TEXTURE_TEMP_MODIFIER[answers.skinTexture]);
   }
 
   // White/cream test — classic temperature diagnostic
@@ -88,10 +66,7 @@ export function analyzeColorSeason(answers) {
   else if (answers.featureClarity === 'somewhat_soft') satScores.push(3.5);
   else if (answers.featureClarity === 'very_soft')     satScores.push(1.5);
 
-  // Skin conditions lower saturation tolerance
-  const conditionMod = CONDITION_SAT_MODIFIER[answers.skinCondition] ?? 0;
-  let saturation = satScores.length > 0 ? average(satScores) + conditionMod : 5.0 + conditionMod;
-  saturation = Math.max(0, Math.min(10, saturation));
+  const saturation = satScores.length > 0 ? average(satScores) : 5.0;
 
   // ── Contrast ──
   const contrastScores = [];
@@ -100,10 +75,6 @@ export function analyzeColorSeason(answers) {
   else if (answers.contrast === 'medium') contrastScores.push(5.0);
   else if (answers.contrast === 'low')    contrastScores.push(2.5);
   const contrast = contrastScores.length > 0 ? average(contrastScores) : 5.0;
-
-  // ── Seasonal skin variation ──
-  // Some people are deeper in summer, lighter in winter
-  const seasonalVariation = answers.seasonalChange ?? 'none';
 
   // ── Match to one of the 12 seasons ──
   const { subSeason } = findClosestSeason(temperature, depth, saturation);
@@ -115,7 +86,6 @@ export function analyzeColorSeason(answers) {
     subSeason,
     secondaryBorrowing: seasonData.secondaryBorrowing,
     borrowingNote:      seasonData.borrowingNote,
-    seasonalVariation,
     traits: {
       temperature: { value: temperature,  label: getTemperatureLabel(temperature) },
       depth:       { value: depth,        label: getDepthLabel(depth) },
