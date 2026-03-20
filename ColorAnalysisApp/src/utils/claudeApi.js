@@ -9,9 +9,15 @@
 // ─────────────────────────────────────────────
 
 const CLAUDE_API_KEY = 'YOUR_CLAUDE_API_KEY';
-const MODEL_COLOR  = 'claude-haiku-4-5-20251001'; // color matching — called often, keep cheap
-const MODEL_NARRATIVE = 'claude-haiku-4-5-20251001'; // narrative — called once per quiz
 const API_URL = 'https://api.anthropic.com/v1/messages';
+
+// Model selection per model_usage_guide.md:
+// Opus   — any call where being wrong produces an incorrect season (photo analysis)
+// Sonnet — text reasoning on confirmed data (palette summaries, product recs)
+// Haiku  — formatting/templating existing results (narrative, UI copy)
+const MODEL_OPUS    = 'claude-opus-4-6';
+const MODEL_SONNET  = 'claude-sonnet-4-6';
+const MODEL_HAIKU   = 'claude-haiku-4-5-20251001';
 
 // ─────────────────────────────────────────────
 // Full 12-season color analysis methodology
@@ -372,7 +378,7 @@ Respond ONLY with valid JSON in this exact format:
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: MODEL_COLOR,
+        model: MODEL_OPUS, // photo analysis — never substitute per model_usage_guide.md
         max_tokens: 300,
         system: systemPrompt,
         messages: [
@@ -421,13 +427,17 @@ Respond ONLY with valid JSON in this exact format:
  */
 export async function generateSeasonNarrative(seasonResult) {
   const { subSeason, traits } = seasonResult;
-  const cacheKey = `hg_narrative_${subSeason}`;
+  const CACHE_KEY = 'hg_narrative_cache';
 
-  // Return cached version if available — never charge twice for the same season
+  // Serve cache if season type hasn't changed — per model_usage_guide.md
+  // Invalidate only when the season classification itself changes
   try {
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    const cached = await AsyncStorage.getItem(cacheKey);
-    if (cached) return cached;
+    const raw = await AsyncStorage.getItem(CACHE_KEY);
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (cached.seasonType === subSeason) return cached.narrative;
+    }
   } catch {}
 
   // Narrative doesn't need the full photo-analysis methodology —
@@ -454,7 +464,7 @@ Paragraph 2: Exact color guidance — what to wear, what to avoid, one makeup di
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: MODEL_NARRATIVE,
+        model: MODEL_HAIKU, // narrative templating — Haiku per model_usage_guide.md
         max_tokens: 350,
         system: narrativeSystem,
         messages: [{ role: 'user', content: prompt }],
@@ -466,11 +476,11 @@ Paragraph 2: Exact color guidance — what to wear, what to avoid, one makeup di
     const data = await response.json();
     const text = data.content?.[0]?.text ?? null;
 
-    // Cache so this season never gets called again
+    // Cache with season type — invalidated automatically if season changes
     if (text) {
       try {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        await AsyncStorage.setItem(cacheKey, text);
+        await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ seasonType: subSeason, narrative: text }));
       } catch {}
     }
 
