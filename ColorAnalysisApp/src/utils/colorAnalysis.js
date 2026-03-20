@@ -1,18 +1,8 @@
 import { SEASON_PROFILES } from '../data/seasons';
 
 // ─────────────────────────────────────────────
-// Skin undertone mapping (primary axis — skin only)
+// Skin depth mapping
 // ─────────────────────────────────────────────
-
-const SKIN_UNDERTONE_TEMP = {
-  golden_yellow:  2.0,   // warm
-  peachy:         2.5,   // warm-neutral
-  neutral_beige:  5.0,   // neutral
-  pink_rosy:      7.5,   // cool
-  blue_pink:      9.0,   // cool
-  olive_green:    3.5,   // warm-olive
-  gray_ashy:      8.0,   // cool-olive
-};
 
 const SKIN_DEPTH_MAP = {
   fair:       1.5,
@@ -23,6 +13,21 @@ const SKIN_DEPTH_MAP = {
   very_deep: 10.0,
 };
 
+// Ethnicity-informed temperature priors.
+// These are soft population-level tendencies, not rules.
+// They are low-weight — photos always override.
+const ETHNICITY_TEMP_PRIOR = {
+  east_asian:     4.5,  // tends neutral-warm
+  sea_filipino:   3.5,  // tends warm, often olive
+  south_asian:    4.0,  // tends warm to neutral-warm
+  black_american: 4.5,  // wide range — soft warm prior
+  latina:         4.0,  // tends warm
+  middle_eastern: 4.5,  // tends neutral-warm to warm
+  white_european: 5.5,  // widest range — neutral prior
+  mixed:          5.0,  // neutral prior
+  other:          5.0,
+};
+
 
 // ─────────────────────────────────────────────
 // Main Analysis Function
@@ -30,51 +35,37 @@ const SKIN_DEPTH_MAP = {
 
 export function analyzeColorSeason(answers) {
   // ── Temperature (0 = very warm, 10 = very cool) ──
+  // Primary signal: white/cream test (observable, unbiased)
+  // Secondary signal: ethnicity prior (soft population tendency, low weight)
   const tempScores = [];
 
-  // Skin undertone is the primary signal
-  if (SKIN_UNDERTONE_TEMP[answers.skinUndertone] !== undefined) {
-    // Weight undertone heavily — it's the most reliable axis
-    tempScores.push(SKIN_UNDERTONE_TEMP[answers.skinUndertone]);
-    tempScores.push(SKIN_UNDERTONE_TEMP[answers.skinUndertone]);
-  }
-
-  // White/cream test — classic temperature diagnostic
   if (answers.bestWhite === 'pure_white') tempScores.push(8.0);
-  else if (answers.bestWhite === 'cream')  tempScores.push(2.0);
-  else tempScores.push(5.0);
+  else if (answers.bestWhite === 'cream') tempScores.push(2.0);
+  // 'both' or missing → no push, ethnicity prior carries it
 
-  // Jewelry
-  if (answers.jewelry === 'gold')   tempScores.push(2.0);
-  else if (answers.jewelry === 'silver') tempScores.push(8.5);
-  else tempScores.push(5.0);
+  // Ethnicity prior — low weight (single score), photos will override via Claude
+  const ethnicityPrior = ETHNICITY_TEMP_PRIOR[answers.ethnicity];
+  if (ethnicityPrior !== undefined) tempScores.push(ethnicityPrior);
 
-  const temperature = average(tempScores);
+  const temperature = tempScores.length > 0 ? average(tempScores) : 5.0;
 
   // ── Depth (0 = very light, 10 = very deep) ──
-  const depthScores = [];
-  if (SKIN_DEPTH_MAP[answers.skinDepth] !== undefined) {
-    depthScores.push(SKIN_DEPTH_MAP[answers.skinDepth]);
-    depthScores.push(SKIN_DEPTH_MAP[answers.skinDepth]); // double-weight skin depth
-  }
-  const depth = depthScores.length > 0 ? average(depthScores) : 5.0;
+  const depth = SKIN_DEPTH_MAP[answers.skinDepth] ?? 5.0;
 
   // ── Saturation (0 = muted, 10 = vivid) ──
-  const satScores = [];
-  if (answers.featureClarity === 'very_clear')    satScores.push(9.5);
-  else if (answers.featureClarity === 'fairly_clear')  satScores.push(7.0);
-  else if (answers.featureClarity === 'somewhat_soft') satScores.push(3.5);
-  else if (answers.featureClarity === 'very_soft')     satScores.push(1.5);
-
-  const saturation = satScores.length > 0 ? average(satScores) : 5.0;
+  // No reliable text-only signal — default to neutral.
+  // Claude photo analysis overrides this on the results screen.
+  const saturation = 5.0;
 
   // ── Contrast ──
-  const contrastScores = [];
-  if (answers.contrast === 'very_high') contrastScores.push(9.5);
-  else if (answers.contrast === 'high')   contrastScores.push(7.5);
-  else if (answers.contrast === 'medium') contrastScores.push(5.0);
-  else if (answers.contrast === 'low')    contrastScores.push(2.5);
-  const contrast = contrastScores.length > 0 ? average(contrastScores) : 5.0;
+  const contrastMap = { very_high: 9.5, high: 7.5, medium: 5.0, low: 2.5 };
+  const contrast = contrastMap[answers.contrast] ?? 5.0;
+
+  // ── Seasonal variation (informational — shown on results, doesn't change season) ──
+  const seasonalVariation = answers.seasonalChange ?? 'none';
+
+  // ── Skin condition (informational — used in recommendations, not season matching) ──
+  const skinCondition = answers.skinCondition ?? 'none';
 
   // ── Match to one of the 12 seasons ──
   const { subSeason } = findClosestSeason(temperature, depth, saturation);
@@ -86,6 +77,8 @@ export function analyzeColorSeason(answers) {
     subSeason,
     secondaryBorrowing: seasonData.secondaryBorrowing,
     borrowingNote:      seasonData.borrowingNote,
+    seasonalVariation,
+    skinCondition,
     traits: {
       temperature: { value: temperature,  label: getTemperatureLabel(temperature) },
       depth:       { value: depth,        label: getDepthLabel(depth) },
