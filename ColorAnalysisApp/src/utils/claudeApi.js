@@ -9,7 +9,8 @@
 // ─────────────────────────────────────────────
 
 const CLAUDE_API_KEY = 'YOUR_CLAUDE_API_KEY';
-const MODEL_ID = 'claude-opus-4-6';
+const MODEL_COLOR  = 'claude-haiku-4-5-20251001'; // color matching — called often, keep cheap
+const MODEL_NARRATIVE = 'claude-haiku-4-5-20251001'; // narrative — called once per quiz
 const API_URL = 'https://api.anthropic.com/v1/messages';
 
 // ─────────────────────────────────────────────
@@ -371,7 +372,7 @@ Respond ONLY with valid JSON in this exact format:
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: MODEL_ID,
+        model: MODEL_COLOR,
         max_tokens: 300,
         system: systemPrompt,
         messages: [
@@ -415,11 +416,34 @@ Respond ONLY with valid JSON in this exact format:
 }
 
 /**
- * Generates a full season description and style guide via Claude.
- * Used on the Results screen for a rich, personalized analysis.
+ * Generates a personalized season narrative via Claude.
+ * Cached in AsyncStorage so the API is only called once per season result.
  */
-export async function generateSeasonNarrative(seasonResult, answers) {
-  const { subSeason, primarySeason, traits } = seasonResult;
+export async function generateSeasonNarrative(seasonResult) {
+  const { subSeason, traits } = seasonResult;
+  const cacheKey = `hg_narrative_${subSeason}`;
+
+  // Return cached version if available — never charge twice for the same season
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const cached = await AsyncStorage.getItem(cacheKey);
+    if (cached) return cached;
+  } catch {}
+
+  // Narrative doesn't need the full photo-analysis methodology —
+  // just the 12-season context and a short focused prompt.
+  const narrativeSystem = `You are a personal colour analyst specialising in the 12-season Sci/ART system.
+Write warm, specific, actionable descriptions. Be direct and personal — not generic.
+Never use filler phrases like "as a [season]" or "your coloring is characterized by".`;
+
+  const prompt = `Write a 2-paragraph description for a ${subSeason}.
+
+Traits: ${traits.temperature.label} temperature · ${traits.depth.label} depth · ${traits.saturation.label} saturation · ${traits.contrast.label} contrast.
+
+Paragraph 1: What makes their natural coloring distinctive. Be specific.
+Paragraph 2: Exact color guidance — what to wear, what to avoid, one makeup direction.
+
+2 paragraphs only. Warm but direct tone.`;
 
   try {
     const response = await fetch(API_URL, {
@@ -430,34 +454,27 @@ export async function generateSeasonNarrative(seasonResult, answers) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: MODEL_ID,
-        max_tokens: 500,
-        system: COLOR_ANALYSIS_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: `Write a warm, elegant, personalized 2-paragraph description
-for someone who is a ${subSeason} in the 12-season color system.
-
-Their traits:
-- Temperature: ${traits.temperature.label}
-- Depth: ${traits.depth.label}
-- Saturation: ${traits.saturation.label}
-- Contrast: ${traits.contrast.label}
-
-Paragraph 1: Describe their natural coloring and what makes it distinctive.
-Paragraph 2: Give specific style guidance — what colors and styles make them look their best.
-
-Keep it personal, warm, and actionable. 2 paragraphs only.`,
-          },
-        ],
+        model: MODEL_NARRATIVE,
+        max_tokens: 350,
+        system: narrativeSystem,
+        messages: [{ role: 'user', content: prompt }],
       }),
     });
 
     if (!response.ok) throw new Error('API error');
 
     const data = await response.json();
-    return data.content?.[0]?.text ?? null;
+    const text = data.content?.[0]?.text ?? null;
+
+    // Cache so this season never gets called again
+    if (text) {
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        await AsyncStorage.setItem(cacheKey, text);
+      } catch {}
+    }
+
+    return text;
   } catch {
     return null;
   }
