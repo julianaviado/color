@@ -4,7 +4,9 @@ import {
   SafeAreaView, StatusBar, Animated, Share, ActivityIndicator, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import ViewShot from 'react-native-view-shot';
+// react-native-view-shot requires a dev/production build — not available in Expo Go
+let ViewShot = null;
+try { ViewShot = require('react-native-view-shot').default; } catch {}
 import * as Sharing from 'expo-sharing';
 import { signOut } from 'firebase/auth';
 import { auth, firebaseEnabled } from '../utils/firebase';
@@ -169,26 +171,32 @@ export default function ResultsScreen({ navigation, route }) {
           {/* Shareable profile card */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Your profile card</Text>
-            <ViewShot ref={cardRef} options={{ format: 'png', quality: 1 }}>
+            {ViewShot ? (
+              <ViewShot ref={cardRef} options={{ format: 'png', quality: 1 }}>
+                <ProfileCard result={result} />
+              </ViewShot>
+            ) : (
               <ProfileCard result={result} />
-            </ViewShot>
+            )}
             <View style={styles.shareCardRow}>
+              {ViewShot && (
+                <TouchableOpacity
+                  style={[styles.shareCardBtn, { backgroundColor: accentColor }]}
+                  onPress={handleShareCard}
+                  activeOpacity={0.85}
+                  disabled={sharingCard}
+                >
+                  {sharingCard
+                    ? <ActivityIndicator color="#FAF8F5" size="small" />
+                    : <Text style={styles.shareCardBtnText}>↗  Share card</Text>}
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
-                style={[styles.shareCardBtn, { backgroundColor: accentColor }]}
-                onPress={handleShareCard}
-                activeOpacity={0.85}
-                disabled={sharingCard}
-              >
-                {sharingCard
-                  ? <ActivityIndicator color="#FAF8F5" size="small" />
-                  : <Text style={styles.shareCardBtnText}>↗  Share card</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.shareTextBtn}
+                style={[styles.shareTextBtn, !ViewShot && { flex: 1 }]}
                 onPress={handleShareText}
                 activeOpacity={0.85}
               >
-                <Text style={styles.shareTextBtnText}>Share as text</Text>
+                <Text style={styles.shareTextBtnText}>↗  Share as text</Text>
               </TouchableOpacity>
             </View>
           </View>
