@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../utils/firebase';
+import { auth, firebaseEnabled } from '../utils/firebase';
 import { loadResultLocally } from '../utils/storage';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme';
 
@@ -21,21 +21,30 @@ export default function SplashScreen({ navigation }) {
     ]).start();
 
     const timer = setTimeout(async () => {
-      // Check if user is already logged in
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        unsubscribe();
-        if (user) {
-          // Already authenticated — go straight to results
-          const cached = await loadResultLocally();
-          if (cached) {
-            navigation.replace('Results', { result: cached, answers: null });
+      if (firebaseEnabled && auth) {
+        // Firebase configured — check auth state
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          unsubscribe();
+          if (user) {
+            const cached = await loadResultLocally();
+            if (cached) {
+              navigation.replace('Main', { result: cached });
+            } else {
+              navigation.replace('Quiz');
+            }
           } else {
             navigation.replace('Quiz');
           }
+        });
+      } else {
+        // Firebase not configured — check for cached local result
+        const cached = await loadResultLocally();
+        if (cached) {
+          navigation.replace('Main', { result: cached });
         } else {
           navigation.replace('Quiz');
         }
-      });
+      }
     }, 2200);
 
     return () => clearTimeout(timer);
